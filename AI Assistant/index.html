@@ -1,0 +1,939 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Advanced Virtual Assistant</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <<link rel="stylesheet" href="style.css">
+</head>
+<body>
+     <header class="sticky-header">
+        <div class="header-content">
+            <div class="header-controls">
+                <button class="header-btn" id="chat-history-btn">
+                    <i class="fa-solid fa-clock-rotate-left"></i>
+                    History
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <div class="container">
+        <h1>I'm <span id="name">Virtual</span> <span id="va">Assistant</span></h1>
+        <div class="assistant-container">
+            <div id="conversation-log"></div>
+            <img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" alt="voice" id="voice-indicator">
+            <div class="input-container">
+                <input type="text" id="user-input" placeholder="Type your message...">
+                <div class="buttons-container">
+                    <button class="control-button" id="send-btn"><i class="fa-solid fa-arrow-up"></i></button>                    
+                    <button class="control-button" id="mic-btn"><i class="fa-solid fa-microphone"></i></button>
+                    <button class="control-button" id="stop-btn"><i class="fa-regular fa-circle-stop fa-beat-fade"></i></button>
+                </div>
+            </div>
+        </div>
+
+        <div id="chat-history-panel" class="chat-history-panel">
+            <div class="chat-history-header">
+                <h3>Chat History</h3>
+                <button id="close-history-btn" class="control-button">
+                    <i class="fa-solid fa-times"></i>
+                </button>
+            </div>
+            <div id="chat-history-content"></div>
+             <button class="header-btn" id="clear-history-btn"><i class="fa-solid fa-trash"></i>Clear History</button>
+        </div>
+
+        <div class="commands-list">
+            <h3>Available Commands</h3>
+            <ul>
+                <li class="command-item">
+                    <span class="command-trigger">Hello / Hey</span>
+                </li>
+                <li class="command-item">
+                    <span class="command-trigger">Open [app]</span>
+                </li>
+                <li class="command-item">
+                    <span class="command-trigger">Search for [query]</span>
+                </li>
+                <li class="command-item">
+                    <span class="command-trigger">What's the time</span>
+                </li>
+                <li class="command-item">
+                    <span class="command-trigger">What's the date</span>
+                </li>
+                <li class="command-item">
+                    <span class="command-trigger">Weather in [city]</span>
+                </li>
+                <li class="command-item">
+                    <span class="command-trigger">Tell me about [topic]</span>
+                </li>
+                <li class="command-item">
+                    <span class="command-trigger">Calculate [expression]</span>
+                </li>
+                <li class="command-item">
+                    <span class="command-trigger">Set reminder [time] [task]</span>
+                </li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+const API_URL = "YOUR_API_KEY";
+
+let recognition;
+let synthesis;
+let currentUtterance = null;
+let isRecording = false;
+let interimTranscript = '';
+let finalTranscript = '';
+
+const commandHistory = {
+    commands: [],
+    frequencies: {},
+    maxCommands: 9, // Maximum number of commands to show
+    defaultCommands: [
+        { trigger: "Hello / Hey", description: "Greet the assistant" },
+        { trigger: "Open [app]", description: "Open applications" },
+        { trigger: "Search for [query]", description: "Search the web" },
+        { trigger: "What's the time", description: "Get current time" },
+        { trigger: "What's the date", description: "Get current date" },
+        { trigger: "Weather in [city]", description: "Check weather" },
+        { trigger: "Tell me about [topic]", description: "Get information" },
+        { trigger: "Calculate [expression]", description: "Do calculations" },
+        { trigger: "Set reminder [time] [task]", description: "Set reminders" }
+    ]
+};
+
+    function updateCommandsList() {
+    const commandsList = document.querySelector('.commands-list ul');
+    if (!commandsList) return;
+
+    // Sort commands by frequency
+    const sortedCommands = Object.entries(commandHistory.frequencies)
+        .sort(([, a], [, b]) => b - a)
+        .map(([command]) => command);
+
+    // Combine frequently used commands with default commands
+    let displayCommands = [];
+    
+    // Add frequent commands first
+    sortedCommands.forEach(command => {
+        const defaultCmd = commandHistory.defaultCommands.find(c => c.trigger === command);
+        if (defaultCmd && !displayCommands.includes(defaultCmd)) {
+            displayCommands.push(defaultCmd);
+        }
+    });
+
+    // Fill remaining slots with default commands
+    commandHistory.defaultCommands.forEach(cmd => {
+        if (displayCommands.length < commandHistory.maxCommands && !displayCommands.includes(cmd)) {
+            displayCommands.push(cmd);
+        }
+    });
+
+    // Update the DOM
+    commandsList.innerHTML = displayCommands
+        .slice(0, commandHistory.maxCommands)
+        .map(cmd => `
+            <li class="command-item">
+                <span class="command-trigger">${cmd.trigger}</span>
+            </li>
+        `).join('');
+
+    // Reattach click handlers
+    attachCommandClickHandlers();
+}      
+        
+        function trackCommand(command) {
+    // Update frequency counter
+    commandHistory.frequencies[command] = (commandHistory.frequencies[command] || 0) + 1;
+    
+    // Add to history if not present
+    if (!commandHistory.commands.includes(command)) {
+        commandHistory.commands.push(command);
+    }
+
+    // Update the commands list
+    updateCommandsList();
+}
+
+function detectCommand(input) {
+    // Match input against command patterns
+    const patterns = {
+        greeting: /^(hello|hey|hi)(\s|$)/i,
+        open: /^open\s+\w+/i,
+        search: /^search\s+for\s+.+/i,
+        time: /what'?s?\s+the\s+time/i,
+        date: /what'?s?\s+the\s+date/i,
+        weather: /^weather\s+in\s+\w+/i,
+        tellMe: /^tell\s+me\s+about\s+.+/i,
+        calculate: /^calculate\s+.+/i,
+        reminder: /^set\s+reminder\s+.+/i
+    };
+
+    for (const [type, pattern] of Object.entries(patterns)) {
+        if (pattern.test(input.toLowerCase())) {
+            const matchedCommand = commandHistory.defaultCommands.find(cmd => {
+                const cmdPattern = cmd.trigger
+                    .replace(/\[.*?\]/g, '\\w+')  // Convert [placeholder] to \w+
+                    .replace(/[()[\]{}+*?.,\\^$|#\s]/g, '\\$&'); // Escape regex special chars
+                return new RegExp(cmdPattern, 'i').test(input);
+            });
+            
+            if (matchedCommand) {
+                trackCommand(matchedCommand.trigger);
+                return matchedCommand.trigger;
+            }
+        }
+    }
+    return null;
+}
+ 
+function cleanTextForSpeech(text) {
+    text = text.replace(/[\u{1F300}-\u{1F9FF}\u{2700}-\u{27BF}\u{1F000}-\u{1F02F}\u{1F0A0}-\u{1F0FF}\u{1F100}-\u{1F64F}\u{1F680}-\u{1F6FF}\u{1F910}-\u{1F96B}\u{1F980}-\u{1F9E0}]/gu, '');
+    text = text.replace(/#{1,6}\s/g, '');
+    text = text.replace(/[*_]{1,2}([^*_]+)[*_]{1,2}/g, '$1');
+    text = text.replace(/^[-*+]\s/gm, '');
+    text = text.replace(/^\d+\.\s/gm, '');
+    text = text.replace(/```[\s\S]*?```/g, '');
+    text = text.replace(/`([^`]+)`/g, '$1');
+    text = text.replace(/\[([^\]]+)\]\([^)]+\)/g, '$1');
+    text = text.replace(/\s+/g, ' ').trim();
+    text = text.replace(/[#~>]/g, '');
+    return text;
+}
+
+function initializeSpeech() {
+        if ('webkitSpeechRecognition' in window) {
+            recognition = new webkitSpeechRecognition();
+            recognition.continuous = true; // Changed to true for continuous recording
+            recognition.interimResults = true; // Changed to true for interim results
+            recognition.lang = 'en-US';
+
+            recognition.onstart = () => {
+                isRecording = true;
+                updateMicButtonState(true);
+                // Clear previous transcripts
+                interimTranscript = '';
+                finalTranscript = '';
+                document.getElementById('user-input').value = '';
+            };
+
+            recognition.onresult = (event) => {
+                interimTranscript = '';
+                finalTranscript = '';
+                
+                // Process all results
+                for (let i = event.resultIndex; i < event.results.length; i++) {
+                    const transcript = event.results[i][0].transcript;
+                    
+                    if (event.results[i].isFinal) {
+                        finalTranscript += transcript;
+                    } else {
+                        interimTranscript += transcript;
+                    }
+                }
+
+                // Update input field
+                const userInput = document.getElementById('user-input');
+                userInput.value = finalTranscript + interimTranscript;
+                
+                // Add/remove interim class based on whether there's interim text
+                if (interimTranscript) {
+                    userInput.classList.add('interim');
+                } else {
+                    userInput.classList.remove('interim');
+                }
+            };
+
+            recognition.onend = () => {
+                isRecording = false;
+                updateMicButtonState(false);
+                // Remove interim styling
+                document.getElementById('user-input').classList.remove('interim');
+                
+                // Process final transcript if available
+                if (finalTranscript) {
+                    processUserInput(finalTranscript);
+                    document.getElementById('user-input').value = '';
+                }
+            };
+
+            recognition.onerror = (event) => {
+                isRecording = false;
+                updateMicButtonState(false);
+                console.error('Speech recognition error:', event.error);
+                document.getElementById('user-input').classList.remove('interim');
+            };
+        }
+
+        synthesis = window.speechSynthesis;
+    }
+    
+
+function updateMicButtonState(isRecording) {
+    const micBtn = document.getElementById('mic-btn');
+        const voiceIndicator = document.getElementById('voice-indicator');
+        
+        if (isRecording) {
+            micBtn.innerHTML = '<i class="fa-solid fa-circle-dot fa-beat-fade recording"></i>';
+            micBtn.classList.add('recording');
+            voiceIndicator.style.display = 'block';
+        } else {
+            micBtn.innerHTML = '<i class="fa-solid fa-microphone"></i>';
+            micBtn.classList.remove('recording');
+            voiceIndicator.style.display = 'none';
+        }
+    }
+
+function resetRecordingState() {
+    isRecording = false;
+    document.getElementById('voice-indicator').style.display = 'none';
+    document.getElementById('mic-btn').innerHTML = '<i class="fa-solid fa-microphone"></i>';
+    showControlButtons();
+}
+
+function showStopButton() {
+    document.getElementById('send-btn').style.display = 'none';
+    document.getElementById('mic-btn').style.display = 'none';
+    document.getElementById('stop-btn').style.display = 'flex';
+}
+
+function showControlButtons() {
+    document.getElementById('send-btn').style.display = 'flex';
+    document.getElementById('mic-btn').style.display = 'flex';
+    document.getElementById('stop-btn').style.display = 'none';
+}
+
+async function processWithAI(input) {
+    try {
+        const systemContext = `You are a friendly and natural-sounding virtual assistant named Nyra. Your responses should feel like a real conversation, as if talking to a helpful friend. Use the chat history provided to maintain context and provide more relevant responses. Follow these guidelines:
+        - Use a warm, conversational tone
+        - Keep responses concise and natural
+        - Include subtle verbal fillers occasionally (like "well", "you know", "actually")
+        - Express empathy and understanding
+        - Use contractions (I'm, you're, we'll, etc.)
+        - Vary your sentence structure
+        - Match the user's level of formality
+        - Add personality through gentle humor when appropriate
+        - Use natural transitions between ideas
+        - Show enthusiasm but maintain professionalism
+        - Reference previous parts of the conversation when relevant
+        - Maintain context across multiple exchanges`;
+
+        // Get recent conversation context
+        const recentContext = chatHistory.getRecentContext();
+        const contextString = recentContext
+            .map(msg => `${msg.role} (${new Date(msg.timestamp).toLocaleTimeString()}): ${msg.content}`)
+            .join('\n');
+
+        const formattedPrompt = `${systemContext}
+
+Previous conversation:
+${contextString}
+
+Current user message: ${input}
+
+Remember to:
+- Reference relevant information from the conversation history
+- Maintain conversation continuity
+- Give clear but conversational information
+- End with a friendly, natural closing
+- Use natural pauses and emphasis
+- Sound helpful but not overly formal
+- Mirror the user's communication style
+- Keep the flow smooth and engaging`;
+
+        const response = await fetch(API_URL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                contents: [{
+                    parts: [{
+                        text: formattedPrompt
+                    }]
+                }],
+                generationConfig: {
+                    temperature: 0.9,
+                    topK: 40,
+                    topP: 0.9,
+                    maxOutputTokens: 1024,
+                }
+            })
+        });
+
+        const data = await response.json();
+        
+        if (!data.candidates || !data.candidates[0]?.content?.parts?.[0]?.text) {
+            throw new Error('Invalid response structure');
+        }
+
+        let aiResponse = data.candidates[0].content.parts[0].text;
+        
+        // Clean up the response
+        aiResponse = aiResponse
+            .replace(systemContext, '')
+            .replace(/Previous conversation:[\s\S]*?Current user message:.*\n/, '')
+            .replace(/Remember to:.*\n/, '')
+            .replace(/\n{3,}/g, '\n\n')
+            .replace(/^(#{1,6}.*)\n(?!$)/gm, '$1\n\n')
+            .replace(/\b(I am|You are|It is|That is|We are)\b/g, (match) => {
+                const contractions = {
+                    'I am': "I'm",
+                    'You are': "You're",
+                    'It is': "It's",
+                    'That is': "That's",
+                    'We are': "We're"
+                };
+                return contractions[match];
+            })
+            .replace(/\b(cannot|will not|do not|does not|has not|have not)\b/g, (match) => {
+                const contractions = {
+                    'cannot': "can't",
+                    'will not': "won't",
+                    'do not': "don't",
+                    'does not': "doesn't",
+                    'has not': "hasn't",
+                    'have not': "haven't"
+                };
+                return contractions[match];
+            })
+            .trim();
+            
+        addToChatHistory(input, true);
+        addToChatHistory(aiResponse, false);
+        aiResponse = aiResponse
+            .replace(/([.!?])\s+/g, '$1 ... ')
+            .replace(/,\s+/g, ', ')
+            .replace(/:\s+/g, '... ');
+
+        return aiResponse;
+    } catch (error) {
+        console.error('AI Processing Error:', error);
+        return "I'm sorry, but I ran into a bit of trouble processing that. Could you try asking me in a different way?";
+    }
+}
+
+function formatAIResponse(text) {
+    const codeBlocks = [];
+    text = text.replace(/```[\s\S]*?```/g, match => {
+        codeBlocks.push(match);
+        return `__CODE_BLOCK_${codeBlocks.length - 1}__`;
+    });
+
+    let formatted = text
+        .replace(/^# (.*$)/gm, '<h1>$1</h1>\n')
+        .replace(/^## (.*$)/gm, '<h2>$1</h2>\n')
+        .replace(/^### (.*$)/gm, '<h3>$1</h3>\n')
+        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+        .replace(/\*(.+?)\*/g, '<em>$1</em>')
+        .replace(/^\s*[-*+]\s+(.+)/gm, '<li>$1</li>')
+        .replace(/^\s*(\d+)\.\s+(.+)/gm, '<li>$2</li>')
+        .replace(/`([^`]+)`/g, '<code>$1</code>')
+        .replace(/^\s*>\s+(.+)/gm, '<div class="quote">$1</div>')
+        .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank">$1</a>');
+
+    formatted = formatted.replace(/<li>(?:[^<]+|<(?!\/li>))*<\/li>(?:\s*<li>(?:[^<]+|<(?!\/li>))*<\/li>)*/g, 
+        match => `<ul>${match}</ul>`);
+
+    formatted = formatted.replace(/__CODE_BLOCK_(\d+)__/g, (match, index) => {
+        const code = codeBlocks[index]
+            .replace(/```(\w*)\n([\s\S]*?)```/, '$2')
+            .trim();
+        return `<pre><code>${code}</code></pre>`;
+    });
+
+    formatted = formatted.replace(/^(?!<[hupld])(.*$)/gm, match => {
+        if (match.trim() === '') return '';
+        return `<p>${match}</p>`;
+    });
+
+    return formatted;
+}
+
+function addToLog(message, isUser = false) {
+    const messageDiv = document.createElement('div');
+    messageDiv.classList.add('message');
+    messageDiv.classList.add(isUser ? 'user-message' : 'assistant-message');
+    
+    if (!isUser) {
+        messageDiv.innerHTML = formatAIResponse(message);
+    } else {
+        messageDiv.textContent = message;
+    }
+    
+    const conversationLog = document.getElementById('conversation-log');
+    conversationLog.appendChild(messageDiv);
+    conversationLog.scrollTop = conversationLog.scrollHeight;
+    
+}
+
+function speak(text) {
+    if (synthesis && text) {
+        synthesis.cancel();
+        
+        const cleanedText = cleanTextForSpeech(text);
+        const utterance = new SpeechSynthesisUtterance(cleanedText);
+        utterance.rate = 1;
+        utterance.pitch = 1;
+        utterance.volume = 1;
+        
+        const voices = synthesis.getVoices();
+        const naturalVoice = voices.find(voice => voice.name.includes('Google') || voice.name.includes('Microsoft') || voice.name.includes('Amazon') || voice.name.includes('Apple'));
+        
+        if (naturalVoice) {
+            utterance.voice = naturalVoice;
+        } else {
+            utterance.voice = voices[0];
+        }
+
+        utterance.onstart = () => {
+            showStopButton();
+            currentUtterance = utterance;
+        };
+
+        utterance.onend = () => {
+            currentUtterance = null;
+            showControlButtons();
+            if (recognition && !isRecording) {
+                recognition.start();
+            }
+        };
+
+        utterance.onerror = () => {
+            currentUtterance = null;
+            showControlButtons();
+        };
+
+        synthesis.speak(utterance);
+        addToLog(text, false);
+    }
+}
+
+const identityPatterns = {
+    whoAreYou: [
+        /who are you/i,
+        /who is this/i,
+        /what are you/i,
+        /may i know who you are/i,
+        /can you tell me who you are/i,
+        /could you tell me who you are/i,
+        /who exactly are you/i,
+        /who might you be/i,
+        /do i know who you are/i,
+        /what is your identity/i,
+        /how do i know you/i,
+        /who do you think you are/i,
+        /can you explain who you are/i
+    ],
+    whatIsYourName: [
+        /what(?:'s| is) your name/i,
+        /can you tell me your name/i,
+        /could you tell me your name/i,
+        /may i know your name/i,
+        /do you have a name/i,
+        /what should i call you/i,
+        /how (?:may|should) i (?:address|call) you/i,
+        /what do they call you/i,
+        /what are you called/i,
+        /by what name should i call you/i,
+        /by what name are you known/i,
+        /what name do you go by/i,
+        /what would you like me to call you/i
+    ],
+    whoCreatedYou: [
+        /who (?:created|built|made|designed|developed|programmed) you/i,
+        /can you tell me who created you/i,
+        /could you tell me who created you/i,
+        /who is your creator/i,
+        /who brought you into existence/i,
+        /may i know who made you/i,
+        /can you explain who built you/i,
+        /who was responsible for creating you/i,
+        /by whom were you created/i,
+        /who engineered you/i,
+        /who came up with you/i,
+        /who thought you into existence/i
+    ]
+};
+
+const defaultResponses = {
+    whoAreYou: [
+        "I'm an advanced virtual assistant designed to help you with various tasks. I can answer questions, help with calculations, set reminders, and much more!",
+        "I'm your friendly AI assistant, ready to help you with whatever you need. Think of me as your digital helper!",
+        "I'm a virtual assistant created to make your life easier. I'm knowledgeable about many topics and always eager to help!"
+    ],
+    whatIsYourName: [
+        "You can call me Nyra! I quite like that name.",
+        "I go by Virtual Assistant, but you can just call me Nyra if you prefer!",
+        "My name is Nyra, and I'm here to help you out!"
+    ],
+    whoCreatedYou: [
+        "I was created by a team of developers who are passionate about making helpful AI assistants.",
+        "I'm the result of careful development by programmers who wanted to create a helpful virtual assistant.",
+        "A dedicated team of developers brought me to life to help people like you!"
+    ]
+};
+
+function getRandomResponse(responses) {
+    return responses[Math.floor(Math.random() * responses.length)];
+}
+
+function checkIdentityQuestion(input) {
+    for (const [category, patterns] of Object.entries(identityPatterns)) {
+        for (const pattern of patterns) {
+            if (pattern.test(input)) {
+                return {
+                    matched: true,
+                    response: getRandomResponse(defaultResponses[category])
+                };
+            }
+        }
+    }
+    return { matched: false };
+}
+
+async function processUserInput(input) {
+    addToLog(input, true);
+    const lowerInput = input.toLowerCase();
+    showLoadingIndicator();
+    
+    // Check for identity questions first
+    const identityCheck = checkIdentityQuestion(input);
+    if (identityCheck.matched) {
+        hideLoadingIndicator();
+        speak(identityCheck.response);
+        resetRecordingState();
+        return;
+    }
+    
+    const detectedCommand = detectCommand(input);
+    if (detectedCommand) {
+        console.log(`Detected command: ${detectedCommand}`);
+    }
+
+    if (lowerInput.includes('open ')) {
+        const app = lowerInput.split('open ')[1].trim();
+        hideLoadingIndicator();
+        handleAppOpen(app);
+        resetRecordingState();
+        return;
+    }
+
+    if (lowerInput.includes('time')) {
+        const time = new Date().toLocaleTimeString();
+        hideLoadingIndicator();
+        speak(`The current time is ${time}`);
+        resetRecordingState();
+        return;
+    }
+
+    if (lowerInput.includes('date')) {
+        const date = new Date().toLocaleDateString(undefined, { 
+            weekday: 'long', 
+            year: 'numeric', 
+            month: 'long', 
+            day: 'numeric' 
+        });
+        hideLoadingIndicator();
+        speak(`Today is ${date}`);
+        resetRecordingState();
+        return;
+    }
+
+    const response = await processWithAI(input);
+    hideLoadingIndicator();
+    speak(response);
+    resetRecordingState();
+}
+
+    function attachCommandClickHandlers() {
+    document.querySelectorAll('.command-item').forEach(item => {
+        item.addEventListener('click', () => {
+            const commandTrigger = item.querySelector('.command-trigger').textContent;
+            
+            // Add click animation
+            item.classList.add('clicked');
+            setTimeout(() => item.classList.remove('clicked'), 500);
+            
+            // Track the command usage
+            trackCommand(commandTrigger);
+            
+            // Get the command text and process it
+            const input = document.getElementById('user-input');
+            input.value = commandTrigger;
+            processUserInput(commandTrigger);
+            input.value = '';
+        });
+    });
+}
+
+function handleAppOpen(app) {
+    const appUrls = {
+        'chrome': 'google-chrome://',
+        'firefox': 'firefox://',
+        'word': 'ms-word:/',
+        'excel': 'ms-excel:/',
+        'powerpoint': 'ms-powerpoint:/',
+        'youtube': 'https://youtube.com',
+        'google': 'https://google.com',
+        'gmail': 'https://mail.google.com',
+        'maps': 'https://maps.google.com',
+        'calendar': 'https://calendar.google.com',
+        'drive': 'https://drive.google.com',
+        'spotify': 'https://open.spotify.com',
+        'netflix': 'https://netflix.com'
+    };
+
+    const url = appUrls[app.toLowerCase()];
+    if (url) {
+        window.open(url, '_blank');
+        speak(`Opening ${app}`);
+    } else {
+        speak(`Sorry, I don't know how to open ${app}`);
+    }
+}
+
+window.addEventListener('load', () => {
+    chatHistory.init();
+    initializeChatHistory();
+    initializeSpeech();
+    speak("Hello! How can I assist you today?");
+    updateCommandsList();
+    
+   const clearHistoryBtn = document.getElementById('clear-history-btn');
+    if (clearHistoryBtn) {
+        clearHistoryBtn.addEventListener('click', (e) => {
+            e.stopPropagation(); // Prevent event from bubbling
+            chatHistory.clear();
+            document.getElementById('conversation-log').innerHTML = '';
+            speak("Chat history has been cleared.");
+        });
+    }
+     document.getElementById('mic-btn').addEventListener('click', () => {
+        if (recognition) {
+            if (!isRecording) {
+                recognition.start();
+            } else {
+                recognition.stop();
+            }
+        }
+    });
+
+    document.getElementById('send-btn').addEventListener('click', () => {
+        const input = document.getElementById('user-input');
+        if (input.value.trim()) {
+            processUserInput(input.value);
+            input.value = '';
+        }
+    });
+
+    document.getElementById('stop-btn').addEventListener('click', () => {
+        if (synthesis) {
+            synthesis.cancel();
+        }
+        if (recognition && isRecording) {
+            recognition.stop();
+        }
+        currentUtterance = null;
+        showControlButtons();
+    });
+
+    document.getElementById('user-input').addEventListener('keypress', (e) => {
+        if (e.key === 'Enter' && e.target.value.trim()) {
+            processUserInput(e.target.value);
+            e.target.value = '';
+        }
+    });
+});
+
+function showLoadingIndicator() {
+            const loadingHTML = `
+                <div class="message assistant-message">
+                    <div class="loading-dots">
+                        <div class="dot"></div>
+                        <div class="dot"></div>
+                        <div class="dot"></div>
+                    </div>
+                </div>
+            `;
+            const conversationLog = document.getElementById('conversation-log');
+            conversationLog.insertAdjacentHTML('beforeend', loadingHTML);
+            conversationLog.scrollTop = conversationLog.scrollHeight;
+        }
+
+        function hideLoadingIndicator() {
+            const loadingElements = document.querySelectorAll('.loading-dots');
+            loadingElements.forEach(element => {
+                const messageContainer = element.closest('.message');
+                if (messageContainer) {
+                    messageContainer.remove();
+                }
+            });
+        }
+        
+const chatHistory = {
+    messages: [],
+    maxHistory: 25,  // Increased to 25 messages, adjust as needed
+    maxTokensPerMessage: 500,  // Limit tokens per message for API constraints
+    contextWindowSize: 15,     // Number of messages to include in context window
+    
+    // Initialize with optional persistence
+    init() {
+        // Try to load saved history from localStorage
+        const savedHistory = localStorage.getItem('chatHistory');
+        if (savedHistory) {
+            try {
+                const parsed = JSON.parse(savedHistory);
+                this.messages = parsed.messages || [];
+            } catch (e) {
+                console.error('Error loading chat history:', e);
+                this.messages = [];
+            }
+        }
+    },
+    
+    // Save history to localStorage
+    save() {
+        try {
+            localStorage.setItem('chatHistory', JSON.stringify({
+                messages: this.messages
+            }));
+        } catch (e) {
+            console.error('Error saving chat history:', e);
+            // If localStorage is full, remove oldest messages and try again
+            if (e.name === 'QuotaExceededError') {
+                this.messages = this.messages.slice(-Math.floor(this.maxHistory / 2));
+                this.save();
+            }
+        }
+    },
+    
+    // Add message with token management
+    addMessage(message, isUser) {
+        const newMessage = {
+            role: isUser ? 'user' : 'assistant',
+            content: this.truncateMessage(message),
+            timestamp: new Date().toISOString()
+        };
+        
+        this.messages.push(newMessage);
+        
+        // Keep only the last maxHistory messages
+        if (this.messages.length > this.maxHistory) {
+            this.messages = this.messages.slice(-this.maxHistory);
+        }
+        
+        this.save();
+    },
+    
+    // Get recent context for AI processing
+    getRecentContext() {
+        return this.messages
+            .slice(-this.contextWindowSize)
+            .map(msg => ({
+                role: msg.role,
+                content: msg.content,
+                timestamp: msg.timestamp
+            }));
+    },
+    
+    // Truncate message to avoid excessive length
+    truncateMessage(message) {
+        if (message.length > this.maxTokensPerMessage) {
+            return message.substring(0, this.maxTokensPerMessage) + '...';
+        }
+        return message;
+    },
+    
+    // Clear history
+    clear() {
+        this.messages = [];
+        localStorage.removeItem('chatHistory');
+    }
+};
+
+function addToChatHistory(message, isUser) {
+    chatHistory.addMessage(message, isUser);
+    
+    // Only update the display if the panel is already open
+    const historyPanel = document.getElementById('chat-history-panel');
+    if (historyPanel.classList.contains('open')) {
+        updateChatHistoryDisplay();
+    }
+}
+
+function formatChatHistoryForPrompt() {
+    return chatHistory.messages
+        .map(msg => `${msg.role}: ${msg.content}`)
+        .join('\n');
+}
+
+function initializeChatHistory() {
+    const historyBtn = document.getElementById('chat-history-btn');
+    const closeBtn = document.getElementById('close-history-btn');
+    const historyPanel = document.getElementById('chat-history-panel');
+    
+    // Ensure panel is hidden on initialization
+    historyPanel.classList.remove('open');
+    
+    historyBtn.addEventListener('click', (e) => {
+        e.stopPropagation(); // Prevent document click from immediately closing it
+        historyPanel.classList.add('open');
+        updateChatHistoryDisplay();
+    });
+    
+    closeBtn.addEventListener('click', (e) => {
+        e.stopPropagation(); // Prevent event from bubbling to document
+        historyPanel.classList.remove('open');
+    });
+    
+    // Close panel when clicking outside
+    document.addEventListener('click', (e) => {
+        if (!historyPanel.contains(e.target) && 
+            !historyBtn.contains(e.target) && 
+            historyPanel.classList.contains('open')) {
+            historyPanel.classList.remove('open');
+        }
+    });
+
+    // Prevent clicks within the panel from closing it
+    historyPanel.addEventListener('click', (e) => {
+        e.stopPropagation();
+    });
+}
+
+function updateChatHistoryDisplay() {
+    const historyContent = document.getElementById('chat-history-content');
+    const historyPanel = document.getElementById('chat-history-panel');
+    
+    // Only proceed with update if panel is open
+    if (!historyPanel.classList.contains('open')) {
+        return;
+    }
+    
+    historyContent.innerHTML = '';
+    
+    chatHistory.messages.forEach(msg => {
+        const timestamp = new Date(msg.timestamp).toLocaleString();
+        const historyItem = document.createElement('div');
+        historyItem.classList.add('chat-history-item', msg.role);
+        
+        historyItem.innerHTML = `
+            <div class="chat-history-timestamp">${timestamp}</div>
+            <div class="chat-history-message">${msg.content}</div>
+        `;
+        
+        historyContent.appendChild(historyItem);
+    });
+    
+    // Scroll to bottom of history
+    historyContent.scrollTop = historyContent.scrollHeight;
+}
+    </script>
+  </body>
+</html>
