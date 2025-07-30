@@ -2,12 +2,14 @@
 
 ## 🖼️ Screenshots
 
-![Ai assistant]()
-![Ai assistant]()
-![Ai assistant]()
-![Ai assistant]()
-![Ai assistant]()
-![Ai assistant]()
+![Ai assistant](https://github.com/piyush-kumar499/AI-Projects/blob/main/AI%20Assistant/images/1.jpg)
+![Ai assistant](https://github.com/piyush-kumar499/AI-Projects/blob/main/AI%20Assistant/images/2.jpg)
+![Ai assistant](https://github.com/piyush-kumar499/AI-Projects/blob/main/AI%20Assistant/images/3.jpg)
+![Ai assistant](https://github.com/piyush-kumar499/AI-Projects/blob/main/AI%20Assistant/images/4.jpg)
+![Ai assistant](https://github.com/piyush-kumar499/AI-Projects/blob/main/AI%20Assistant/images/5.jpg)
+![Ai assistant](https://github.com/piyush-kumar499/AI-Projects/blob/main/AI%20Assistant/images/6.jpg)
+![Ai assistant](https://github.com/piyush-kumar499/AI-Projects/blob/main/AI%20Assistant/images/7.jpg)
+![Ai assistant](https://github.com/piyush-kumar499/AI-Projects/blob/main/AI%20Assistant/images/8.jpg)
 
 A modern, voice-enabled AI assistant built with HTML, CSS, and JavaScript. Features real-time voice interaction, chat history, and intelligent responses powered by Google's Gemini AI.
 
