@@ -6,7 +6,11 @@ A simple and elegant AI chatbot web application with image upload support and ch
 **Piyush Kumar**
 
 ## Screenshots
-[]!()
+![Ai Chatbot](https://github.com/piyush-kumar499/AI-Projects/blob/main/AI%20Chatbot/images/Screenshot_2025-07-31-10-02-05-14_f9a7afa717ced9e1fc9be9833291031a.jpg)
+![Ai Chatbot](https://github.com/piyush-kumar499/AI-Projects/blob/main/AI%20Chatbot/images/Screenshot_2025-07-31-10-02-11-10_f9a7afa717ced9e1fc9be9833291031a.jpg)
+![Ai Chatbot](https://github.com/piyush-kumar499/AI-Projects/blob/main/AI%20Chatbot/images/Screenshot_2025-07-31-10-02-16-86_f9a7afa717ced9e1fc9be9833291031a.jpg)
+![Ai Chatbot](https://github.com/piyush-kumar499/AI-Projects/blob/main/AI%20Chatbot/images/Screenshot_2025-07-31-10-02-38-27_f9a7afa717ced9e1fc9be9833291031a.jpg)
+![Ai Chatbot](https://github.com/piyush-kumar499/AI-Projects/blob/main/AI%20Chatbot/images/Screenshot_2025-07-31-10-02-42-93_f9a7afa717ced9e1fc9be9833291031a.jpg)
 
 ## Features
 
